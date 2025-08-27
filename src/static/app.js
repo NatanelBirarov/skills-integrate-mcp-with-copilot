@@ -3,25 +3,80 @@ document.addEventListener("DOMContentLoaded", () => {
   const activitySelect = document.getElementById("activity");
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
+  const categoryFilter = document.getElementById("category-filter");
+  const sortFilter = document.getElementById("sort-filter");
+  const searchBox = document.getElementById("search-box");
+
+  let allActivities = {};
 
   // Function to fetch activities from API
   async function fetchActivities() {
     try {
       const response = await fetch("/activities");
       const activities = await response.json();
+      allActivities = activities;
+      renderActivities();
+      populateCategoryFilter();
+    } catch (error) {
+      activitiesList.innerHTML =
+        "<p>Failed to load activities. Please try again later.</p>";
+      console.error("Error fetching activities:", error);
+    }
 
-      // Clear loading message
+    // Helper to populate category dropdown
+    function populateCategoryFilter() {
+      const categories = new Set();
+      Object.values(allActivities).forEach((details) => {
+        if (details.category) categories.add(details.category);
+      });
+      // Remove old options except 'All'
+      while (categoryFilter.options.length > 1) {
+        categoryFilter.remove(1);
+      }
+      Array.from(categories).sort().forEach((cat) => {
+        const option = document.createElement("option");
+        option.value = cat;
+        option.textContent = cat;
+        categoryFilter.appendChild(option);
+      });
+    }
+
+    // Helper to render activities based on filters
+    function renderActivities() {
       activitiesList.innerHTML = "";
+      activitySelect.innerHTML =
+        '<option value="">-- Select an activity --</option>';
 
-      // Populate activities list
-      Object.entries(activities).forEach(([name, details]) => {
+      // Get filter values
+      const selectedCategory = categoryFilter.value;
+      const sortBy = sortFilter.value;
+      const searchText = searchBox.value.trim().toLowerCase();
+
+      // Filter and sort activities
+      let filtered = Object.entries(allActivities).filter(([name, details]) => {
+        let match = true;
+        if (selectedCategory && details.category !== selectedCategory) match = false;
+        if (searchText &&
+          !name.toLowerCase().includes(searchText) &&
+          !(details.description && details.description.toLowerCase().includes(searchText))
+        ) match = false;
+        return match;
+      });
+
+      if (sortBy === "name") {
+        filtered.sort((a, b) => a[0].localeCompare(b[0]));
+      } else if (sortBy === "date") {
+        filtered.sort((a, b) => {
+          const dateA = a[1].date || "";
+          const dateB = b[1].date || "";
+          return dateA.localeCompare(dateB);
+        });
+      }
+
+      filtered.forEach(([name, details]) => {
         const activityCard = document.createElement("div");
         activityCard.className = "activity-card";
-
-        const spotsLeft =
-          details.max_participants - details.participants.length;
-
-        // Create participants HTML with delete icons instead of bullet points
+        const spotsLeft = details.max_participants - details.participants.length;
         const participantsHTML =
           details.participants.length > 0
             ? `<div class="participants-section">
@@ -40,6 +95,8 @@ document.addEventListener("DOMContentLoaded", () => {
         activityCard.innerHTML = `
           <h4>${name}</h4>
           <p>${details.description}</p>
+          <p><strong>Category:</strong> ${details.category || "N/A"}</p>
+          <p><strong>Date:</strong> ${details.date || "N/A"}</p>
           <p><strong>Schedule:</strong> ${details.schedule}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
           <div class="participants-container">
@@ -60,12 +117,14 @@ document.addEventListener("DOMContentLoaded", () => {
       document.querySelectorAll(".delete-btn").forEach((button) => {
         button.addEventListener("click", handleUnregister);
       });
-    } catch (error) {
-      activitiesList.innerHTML =
-        "<p>Failed to load activities. Please try again later.</p>";
-      console.error("Error fetching activities:", error);
     }
+
+    // Add listeners for toolbar
+    categoryFilter.addEventListener("change", renderActivities);
+    sortFilter.addEventListener("change", renderActivities);
+    searchBox.addEventListener("input", renderActivities);
   }
+  
 
   // Handle unregister functionality
   async function handleUnregister(event) {
